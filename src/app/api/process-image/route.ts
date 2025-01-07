@@ -14,20 +14,22 @@ export async function POST(request: Request) {
             throw new Error('Could not get image dimensions');
         }
 
-        // Create a semi-transparent white rectangle for the watermark area
+        // Create a white rectangle to cover the watermark area
         const watermarkWidth = Math.floor(metadata.width * 0.15); // 15% of width
         const watermarkHeight = Math.floor(metadata.height * 0.04); // 4% of height
         
-        const overlay = await sharp({
-            create: {
-                width: watermarkWidth,
-                height: watermarkHeight,
-                channels: 4,
-                background: { r: 255, g: 255, b: 255, alpha: 0.7 } // Semi-transparent white
-            }
-        }).toBuffer();
+        const overlay = Buffer.from(`<svg>
+            <rect 
+                x="0" 
+                y="0" 
+                width="${watermarkWidth}" 
+                height="${watermarkHeight}" 
+                fill="white" 
+                fill-opacity="0.7"
+            />
+        </svg>`);
 
-        // Composite the overlay onto the original image
+        // Process the image
         let processedImage = sharp(buffer)
             .composite([{
                 input: overlay,
@@ -36,28 +38,18 @@ export async function POST(request: Request) {
                 blend: 'over'
             }]);
 
+        // Ensure output format matches input
         let outputBuffer: Buffer;
-        
-        // Convert to the appropriate format with high quality
-        switch (format) {
+        switch (format.toLowerCase()) {
             case 'jpg':
-                outputBuffer = await processedImage.jpeg({ 
-                    quality: 100,
-                    mozjpeg: true
-                }).toBuffer();
+            case 'jpeg':
+                outputBuffer = await processedImage.jpeg({ quality: 100 }).toBuffer();
                 break;
             case 'webp':
-                outputBuffer = await processedImage.webp({ 
-                    quality: 100,
-                    lossless: true
-                }).toBuffer();
+                outputBuffer = await processedImage.webp({ quality: 100 }).toBuffer();
                 break;
             case 'gif':
-                if (metadata.format === 'gif') {
-                    outputBuffer = await processedImage.gif().toBuffer();
-                } else {
-                    outputBuffer = await processedImage.png().toBuffer();
-                }
+                outputBuffer = await processedImage.gif().toBuffer();
                 break;
             default:
                 outputBuffer = await processedImage.png().toBuffer();
@@ -71,9 +63,12 @@ export async function POST(request: Request) {
         });
     } catch (error) {
         console.error('Image processing error:', error);
-        return NextResponse.json(
-            { error: 'Failed to process image' },
-            { status: 500 }
-        );
+        // If processing fails, return the original image
+        return new NextResponse(Buffer.from(data), {
+            headers: {
+                'Content-Type': `image/${format}`,
+                'Cache-Control': 'public, max-age=31536000',
+            },
+        });
     }
 }

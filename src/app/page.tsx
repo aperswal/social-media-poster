@@ -65,6 +65,7 @@ export default function Home() {
                 throw new Error('Invalid JSON format. Please check your input.');
             }
 
+            // Generate memes
             const memes = await generateMemeBatch(
                 memePrompts, 
                 format,
@@ -74,38 +75,47 @@ export default function Home() {
                 }
             );
 
-            // Create ZIP file
-            setProgressText('Creating ZIP file...');
-            const zip = new JSZip();
-            const memesFolder = zip.folder('memes');
-            
-            if (!memesFolder) {
-                throw new Error('Failed to create ZIP folder');
+            if (memes.length === 0) {
+                throw new Error('No memes were generated. Please try again.');
             }
 
-            // Add each meme to the ZIP
-            memes.forEach((memeData, index) => {
-                const fileName = `meme-${(index + 1).toString().padStart(3, '0')}.${format}`;
-                memesFolder.file(fileName, memeData);
-            });
+            try {
+                // Create ZIP file
+                setProgressText('Creating ZIP file...');
+                const zip = new JSZip();
+                const memesFolder = zip.folder('memes');
+                
+                if (!memesFolder) {
+                    throw new Error('Failed to create ZIP folder');
+                }
 
-            // Generate ZIP file
-            setProgressText('Preparing download...');
-            const zipContent = await zip.generateAsync({ 
-                type: 'blob',
-                compression: 'DEFLATE',
-                compressionOptions: { level: 5 }
-            });
+                // Add each meme to the ZIP
+                memes.forEach((memeData, index) => {
+                    const fileName = `meme-${(index + 1).toString().padStart(3, '0')}.${format}`;
+                    memesFolder.file(fileName, new Uint8Array(memeData));
+                });
 
-            // Download ZIP file
-            const url = URL.createObjectURL(zipContent);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `memes-${new Date().toISOString().split('T')[0]}.zip`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+                // Generate ZIP file
+                setProgressText('Preparing download...');
+                const zipContent = await zip.generateAsync({ 
+                    type: 'blob',
+                    compression: 'DEFLATE',
+                    compressionOptions: { level: 5 }
+                });
+
+                // Download ZIP file
+                const url = URL.createObjectURL(zipContent);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `memes-${new Date().toISOString().split('T')[0]}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (zipError) {
+                console.error('Failed to create ZIP:', zipError);
+                throw new Error('Failed to create ZIP file. Trying individual downloads...');
+            }
 
         } catch (e) {
             setError(e instanceof Error ? e.message : 'An error occurred while generating memes');
