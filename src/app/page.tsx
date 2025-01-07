@@ -1,29 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { ImageFormat, generateMemeBatch } from '@/lib/memeGenerator';
+import { useState, useCallback, useEffect } from 'react';
+import { ImageFormat, generateMemeBatch, DEFAULT_PROMPTS } from '@/lib/memeGenerator';
 
-const DEFAULT_PROMPTS = [
-    { top: "When the code works", bottom: "But you don't know why" },
-    { top: "One more coffee", bottom: "What could go wrong?" },
-    { top: "Debugging for hours", bottom: "It was a typo" },
-    { top: "Me explaining my code", bottom: "Me reading it next day" },
-    { top: "It works on my machine", bottom: "Then we'll ship your machine" },
-];
+interface LoadingBarProps {
+    progress: number;
+    total: number;
+}
 
-const EXAMPLE_JSON = `[
-    {
-        "top": "When the code works",
-        "bottom": "But you don't know why"
-    },
-    {
-        "top": "One more coffee",
-        "bottom": "What could go wrong?"
-    }
-]`;
-
-const LoadingBar = ({ progress, total }: { progress: number; total: number }) => {
-    const percentage = (progress / total) * 100;
+const LoadingBar: React.FC<LoadingBarProps> = ({ progress, total }) => {
+    const percentage = Math.min((progress / Math.max(1, total)) * 100, 100);
     
     return (
         <div className="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
@@ -37,6 +23,17 @@ const LoadingBar = ({ progress, total }: { progress: number; total: number }) =>
     );
 };
 
+const EXAMPLE_JSON = `[
+    {
+        "top": "When the code works",
+        "bottom": "But you don't know why"
+    },
+    {
+        "top": "One more coffee",
+        "bottom": "What could go wrong?"
+    }
+]`;
+
 export default function Home() {
     const [format, setFormat] = useState<ImageFormat>('png');
     const [prompts, setPrompts] = useState<string>('');
@@ -44,8 +41,14 @@ export default function Home() {
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string>('');
     const [copied, setCopied] = useState(false);
+    const [totalMemes, setTotalMemes] = useState(0);
+    const [mounted, setMounted] = useState(false);
 
-    const handleGenerate = async () => {
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const handleGenerate = useCallback(async () => {
         try {
             setGenerating(true);
             setError('');
@@ -54,6 +57,7 @@ export default function Home() {
             let memePrompts;
             try {
                 memePrompts = JSON.parse(prompts || JSON.stringify(DEFAULT_PROMPTS));
+                setTotalMemes(memePrompts.length);
             } catch (e) {
                 throw new Error('Invalid JSON format. Please check your input.');
             }
@@ -82,13 +86,17 @@ export default function Home() {
             setGenerating(false);
             setProgress(0);
         }
-    };
+    }, [format, prompts]);
 
-    const copyExample = () => {
+    const copyExample = useCallback(() => {
         navigator.clipboard.writeText(EXAMPLE_JSON);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    };
+    }, []);
+
+    if (!mounted) {
+        return null; // Prevent hydration issues
+    }
 
     return (
         <main className="min-h-screen bg-gray-900 text-white">
@@ -98,10 +106,11 @@ export default function Home() {
                 
                 <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
                     <div className="mb-6">
-                        <label className="block text-sm font-medium mb-2">
+                        <label className="block text-sm font-medium mb-2" htmlFor="format-select">
                             Image Format
                         </label>
                         <select
+                            id="format-select"
                             value={format}
                             onChange={(e) => setFormat(e.target.value as ImageFormat)}
                             className="w-full max-w-xs p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-white"
@@ -114,7 +123,7 @@ export default function Home() {
                     </div>
 
                     <div className="mb-6">
-                        <label className="block text-sm font-medium mb-2">
+                        <label className="block text-sm font-medium mb-2" htmlFor="prompts-input">
                             Meme Prompts (JSON Array)
                         </label>
                         <div className="text-xs text-gray-400 mb-2">
@@ -126,6 +135,7 @@ export default function Home() {
                             <div className="flex justify-between items-center mb-2">
                                 <span className="text-sm font-medium">Example Format:</span>
                                 <button
+                                    type="button"
                                     onClick={copyExample}
                                     className="text-sm px-3 py-1 bg-gray-600 border border-gray-500 rounded-md hover:bg-gray-500 transition-colors duration-200"
                                 >
@@ -138,6 +148,7 @@ export default function Home() {
                         </div>
 
                         <textarea
+                            id="prompts-input"
                             value={prompts}
                             onChange={(e) => setPrompts(e.target.value)}
                             placeholder="Paste your JSON here..."
@@ -146,7 +157,7 @@ export default function Home() {
                     </div>
 
                     {error && (
-                        <div className="mb-6 p-4 bg-red-900/50 text-red-200 rounded-md border border-red-700">
+                        <div className="mb-6 p-4 bg-red-900/50 text-red-200 rounded-md border border-red-700" role="alert">
                             {error}
                         </div>
                     )}
@@ -154,11 +165,12 @@ export default function Home() {
                     {generating && (
                         <div className="mb-6">
                             <div className="text-sm text-gray-300 mb-2">Generating memes...</div>
-                            <LoadingBar progress={progress} total={JSON.parse(prompts || JSON.stringify(DEFAULT_PROMPTS)).length || 0} />
+                            <LoadingBar progress={progress} total={totalMemes} />
                         </div>
                     )}
 
                     <button
+                        type="button"
                         onClick={handleGenerate}
                         disabled={generating}
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md shadow-sm disabled:opacity-50 transition-colors duration-200 font-medium"
