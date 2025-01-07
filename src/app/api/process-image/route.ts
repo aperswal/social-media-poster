@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import sharp from 'sharp';
 
 export async function POST(request: Request) {
+    const format = request.headers.get('x-image-format') || 'png';
+    
     try {
         const data = await request.arrayBuffer();
         const buffer = Buffer.from(data);
-        const format = request.headers.get('x-image-format') || 'png';
 
         // Get image metadata
         const metadata = await sharp(buffer).metadata();
