@@ -63,8 +63,9 @@ export async function POST(request: Request) {
         });
     } catch (error) {
         console.error('Image processing error:', error);
-        // If processing fails, return the original image
-        return new NextResponse(Buffer.from(data), {
+        // If processing fails, return the original buffer
+        const originalBuffer = Buffer.from(await request.arrayBuffer());
+        return new NextResponse(originalBuffer, {
             headers: {
                 'Content-Type': `image/${format}`,
                 'Cache-Control': 'public, max-age=31536000',
