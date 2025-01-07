@@ -14,27 +14,26 @@ export async function POST(request: Request) {
             throw new Error('Could not get image dimensions');
         }
 
-        // Calculate dimensions for the watermark area (bottom left corner)
+        // Create a semi-transparent white rectangle for the watermark area
         const watermarkWidth = Math.floor(metadata.width * 0.15); // 15% of width
         const watermarkHeight = Math.floor(metadata.height * 0.04); // 4% of height
-
-        // Extract and blur just the logo area
-        const watermarkArea = await sharp(buffer)
-            .extract({
-                left: 0,
-                top: metadata.height - watermarkHeight,
+        
+        const overlay = await sharp({
+            create: {
                 width: watermarkWidth,
-                height: watermarkHeight
-            })
-            .blur(10) // Reduced blur for more subtle effect
-            .toBuffer();
+                height: watermarkHeight,
+                channels: 4,
+                background: { r: 255, g: 255, b: 255, alpha: 0.7 } // Semi-transparent white
+            }
+        }).toBuffer();
 
-        // Composite the blurred logo area back onto the original image
+        // Composite the overlay onto the original image
         let processedImage = sharp(buffer)
             .composite([{
-                input: watermarkArea,
+                input: overlay,
                 top: metadata.height - watermarkHeight,
-                left: 0
+                left: 0,
+                blend: 'over'
             }]);
 
         let outputBuffer: Buffer;
@@ -44,7 +43,7 @@ export async function POST(request: Request) {
             case 'jpg':
                 outputBuffer = await processedImage.jpeg({ 
                     quality: 100,
-                    mozjpeg: true // Better compression
+                    mozjpeg: true
                 }).toBuffer();
                 break;
             case 'webp':

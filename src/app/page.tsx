@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { ImageFormat, generateMemeBatch, DEFAULT_PROMPTS } from '@/lib/memeGenerator';
+import JSZip from 'jszip';
 
 interface LoadingBarProps {
     progress: number;
@@ -43,6 +44,7 @@ export default function Home() {
     const [copied, setCopied] = useState(false);
     const [totalMemes, setTotalMemes] = useState(0);
     const [mounted, setMounted] = useState(false);
+    const [progressText, setProgressText] = useState<string>('');
 
     useEffect(() => {
         setMounted(true);
@@ -53,6 +55,7 @@ export default function Home() {
             setGenerating(true);
             setError('');
             setProgress(0);
+            setProgressText('Generating memes...');
 
             let memePrompts;
             try {
@@ -65,26 +68,51 @@ export default function Home() {
             const memes = await generateMemeBatch(
                 memePrompts, 
                 format,
-                (current) => setProgress(current)
+                (current) => {
+                    setProgress(current);
+                    setProgressText(`Generating meme ${current} of ${memePrompts.length}...`);
+                }
             );
+
+            // Create ZIP file
+            setProgressText('Creating ZIP file...');
+            const zip = new JSZip();
+            const memesFolder = zip.folder('memes');
             
-            // Download each meme
+            if (!memesFolder) {
+                throw new Error('Failed to create ZIP folder');
+            }
+
+            // Add each meme to the ZIP
             memes.forEach((memeData, index) => {
-                const blob = new Blob([memeData], { type: `image/${format}` });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `meme-${index + 1}.${format}`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                const fileName = `meme-${(index + 1).toString().padStart(3, '0')}.${format}`;
+                memesFolder.file(fileName, memeData);
             });
+
+            // Generate ZIP file
+            setProgressText('Preparing download...');
+            const zipContent = await zip.generateAsync({ 
+                type: 'blob',
+                compression: 'DEFLATE',
+                compressionOptions: { level: 5 }
+            });
+
+            // Download ZIP file
+            const url = URL.createObjectURL(zipContent);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `memes-${new Date().toISOString().split('T')[0]}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
         } catch (e) {
             setError(e instanceof Error ? e.message : 'An error occurred while generating memes');
         } finally {
             setGenerating(false);
             setProgress(0);
+            setProgressText('');
         }
     }, [format, prompts]);
 
@@ -130,7 +158,6 @@ export default function Home() {
                             Leave empty to use default examples, or paste JSON from an AI assistant
                         </div>
                         
-                        {/* Example JSON Section */}
                         <div className="mb-4 p-4 bg-gray-700 rounded-md border border-gray-600">
                             <div className="flex justify-between items-center mb-2">
                                 <span className="text-sm font-medium">Example Format:</span>
@@ -164,7 +191,7 @@ export default function Home() {
 
                     {generating && (
                         <div className="mb-6">
-                            <div className="text-sm text-gray-300 mb-2">Generating memes...</div>
+                            <div className="text-sm text-gray-300 mb-2">{progressText}</div>
                             <LoadingBar progress={progress} total={totalMemes} />
                         </div>
                     )}
@@ -180,7 +207,7 @@ export default function Home() {
                 </div>
 
                 <div className="mt-8 text-center text-sm text-gray-400">
-                    <p>Powered by memegen.link API • Images will download automatically</p>
+                    <p>Powered by memegen.link API • All memes will be downloaded as a ZIP file</p>
                 </div>
             </div>
         </main>
